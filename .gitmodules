@@ -1,0 +1,3 @@
+[submodule "evermizer"]
+	path = evermizer
+	url = git@github.com:black-sliver/evermizer.git
