@@ -5,7 +5,7 @@
 /*** _evermizer.Location type ***/
 
 typedef struct {
-    PyObject_HEAD;
+    PyObject_HEAD
     PyObject *name;
     enum check_tree_item_type type;
     unsigned short index; 

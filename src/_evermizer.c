@@ -37,7 +37,7 @@ path2ansi(PyObject *stringOrPath, void* result)
         PyObject *str, *fspath;
         fspath = PyObject_GetAttrString(stringOrPath, "__fspath__");
         if (!fspath) return 0;
-        str = PyObject_CallNoArgs(fspath); /* to string */
+        str = PyObject_CallObject(fspath, NULL); /* to string */
         Py_DECREF(fspath);
         if (!str) return 0;
         *out = PyUnicode_EncodeLocale(str, "strict"); /* to ansi */
@@ -170,7 +170,7 @@ static PyObject *PyList_from_providers(const struct progression_provider *first,
 }
 
 static PyObject *
-_evermizer_get_locations(PyObject *self, PyObject *)
+_evermizer_get_locations(PyObject *self, PyObject *args)
 {
     const size_t ng = ARRAY_SIZE(gourd_data);
     const size_t nb = ARRAY_SIZE(boss_names);

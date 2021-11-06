@@ -5,7 +5,7 @@
 /*** _evermizer.Item type ***/
 
 typedef struct {
-    PyObject_HEAD;
+    PyObject_HEAD
     PyObject *name;
     char progression;
     enum check_tree_item_type type;

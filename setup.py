@@ -54,7 +54,7 @@ class EvermizerPreBuild():
             ['ips2h.py', ['-a', evermizer_dir / 'gen.h', *ips]]
         ):
             try:
-                res = subprocess.run([py, evermizer_dir / script, *args],
+                res = subprocess.run([py, str(evermizer_dir / script), *map(str,args)],
                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
                 print(res.stdout.decode('utf-8'), end='')
             except Exception as ex:
@@ -87,7 +87,7 @@ setup (name = 'pyevermizer',
        url = 'https://github.com/black-sliver/pyevermizer',
        python_requires='>=3', # TODO: test this
        packages = ['pyevermizer'],
-       package_dir = {'pyevermizer': src_dir},
+       package_dir = {'pyevermizer': str(src_dir)},
        ext_modules = [evermizer_module],
        cmdclass={'build_ext': EvermizerExtBuilder})
 
