@@ -18,13 +18,117 @@ using namespace _evermizer;
 #include "location.h"
 #include "item.h"
 
+/* helpers */
+static int
+path2ansi(PyObject *stringOrPath, void* result)
+{
+    /* NOTE: PyUnicode_FSConverter does not work anymore on windows for fopen()
+             see https://www.python.org/dev/peps/pep-0529/ */
+    PyObject **out = (PyObject **) result;
+    assert(stringOrPath); /* TODO: raise exception */
+    assert(out); /* TODO: raise exception */
+    if (Py_TYPE(stringOrPath) == &PyBytes_Type) {
+        /* already bytes, assume ansi */
+        *out = stringOrPath;
+        Py_INCREF(stringOrPath);
+    }
+    else if (PyObject_HasAttrString(stringOrPath, "__fspath__")) {
+        /* path */
+        PyObject *str, *fspath;
+        fspath = PyObject_GetAttrString(stringOrPath, "__fspath__");
+        if (!fspath) return 0;
+        str = PyObject_CallNoArgs(fspath); /* to string */
+        Py_DECREF(fspath);
+        if (!str) return 0;
+        *out = PyUnicode_EncodeLocale(str, "strict"); /* to ansi */
+        Py_DECREF(str);
+    } else {
+        /* already string */
+        *out = PyUnicode_EncodeLocale(stringOrPath, "strict"); /* to ansi */
+    }
+    if (!*out) return 0;
+    return 1;
+}
+
 /* methods */
 static PyObject *
-_evermizer_main(PyObject *self, PyObject *)
+_evermizer_main(PyObject *self, PyObject *py_args)
 {
-    // TODO: run evermizer_main
-    PyErr_SetString(PyExc_NotImplementedError, "main not implemented yet");
-    return NULL;
+    /* _evermizer.main call signature:
+        src: Path, dst: Path, placement: Path, apseed: str, apslot: str, seed: int, flags: str, money: int, exp: int
+    */
+
+    /* original main signature:
+          int argc, char** argv: { <exe> [flags ...] <src.sfc> [settings [seed]] }
+       mapped main signature:
+          15, { "evermizer", '-b", "-o", "<dst.sfc>", "--money", "<money%>", "--exp', "<exp%>",
+               "--id", "<hex(32B ap seed)>[:]<hex(32B ap slot)>", "--placement", "<placement.txt>",
+               "<src.sfc>", "<flags>", "<seed>" }
+       TODO: split UI/argument parsing from generation in evermizer, so we don't need to call the C main
+    */
+
+    PyObject *osrc, *odst, *oplacement;
+    const char *ap_seed, *ap_slot;
+    PyObject *oseed; /* any integer -> PyObject */
+    const char* flags;
+    int money, exp;
+    if (!PyArg_ParseTuple(py_args, "O&O&O&ssOsii", path2ansi, &osrc, path2ansi, &odst, path2ansi, &oplacement,
+                          &ap_seed, &ap_slot, &oseed, &flags, &money, &exp))
+        return NULL;
+
+    uint64_t seed = (uint64_t)PyLong_AsUnsignedLongLong(oseed);
+    if (PyErr_Occurred()) {
+        PyErr_Clear();
+        Py_DECREF(osrc);
+        Py_DECREF(odst);
+        Py_DECREF(oplacement);
+        return PyErr_Format(PyExc_TypeError, "6th parameter 'seed' must be unsigned integer type, but got %s",
+                            Py_TYPE(oseed)->tp_name);
+    }
+    char sseed[21]; snprintf(sseed, sizeof(sseed), "%" PRIx64, seed);
+
+    const char *src = PyBytes_AS_STRING(osrc);
+    const char *dst = PyBytes_AS_STRING(odst);
+    const char *placement = PyBytes_AS_STRING(oplacement);
+
+    if (exp > 9999) exp = 9999;
+    if (exp < 0) exp = 0;
+    char sexp[5]; snprintf(sexp, sizeof(sexp), "%d", exp);
+
+    if (money > 9999) money = 9999;
+    if (money < 0) money = 0;
+    char smoney[5]; snprintf(smoney, sizeof(smoney), "%d", money);
+
+    char hexchars[] = "0123456789ABCDEF";
+    char id_buf[130]; /* hex(32B):hex(32B)\0 */
+    memset(id_buf, 0, 130);
+    char *id_bufp = id_buf;
+    for (uint8_t i=0; i<32; i++) {
+        if (!ap_seed[i]) break;
+        *id_bufp++ = hexchars[((uint8_t)ap_seed[i]>>4)&0x0f];
+        *id_bufp++ = hexchars[((uint8_t)ap_seed[i]>>0)&0x0f];
+    }
+    *id_bufp++ = ':';
+    for (uint8_t i=0; i<32; i++) {
+        if (!ap_slot[i]) break;
+        *id_bufp++ = hexchars[((uint8_t)ap_slot[i]>>4)&0x0f];
+        *id_bufp++ = hexchars[((uint8_t)ap_slot[i]>>0)&0x0f];
+    }
+
+    const char *main_args[] = {
+        "main", "-b", "-o", dst, "--money", smoney, "--exp", sexp,
+        "--id", id_buf, "--placement", placement, src, flags, sseed
+    };
+
+    // TODO: verify ap_seed is <= 32 bytes
+    // TODO: capture stderr?
+    int res = evermizer_main(ARRAY_SIZE(main_args), main_args);
+
+    Py_DECREF(osrc);
+    Py_DECREF(odst);
+    Py_DECREF(oplacement);
+
+    return PyLong_FromLong(res);
 }
 
 static PyObject *PyList_from_requirements(const struct progression_requirement *first, size_t len)
@@ -65,7 +169,6 @@ static PyObject *PyList_from_providers(const struct progression_provider *first,
     return list;
 }
 
-// TODO: change to get_locations() and add (type,number) ?
 static PyObject *
 _evermizer_get_locations(PyObject *self, PyObject *)
 {
@@ -112,14 +215,14 @@ _evermizer_get_locations(PyObject *self, PyObject *)
             if (!o) goto error;
             if (((LocationObject*) o)->type != check->type) continue;
             if (((LocationObject*) o)->index != check->index) continue;
-            // fill in requirements
+            /* fill in requirements */
             if (check->requires[0].progress != P_NONE) {
                 PyObject *requirements = PyList_from_requirements(check->requires, ARRAY_SIZE(check->requires));
                 PyObject_SetAttrString(o, "requires", requirements);
                 assert(requirements->ob_refcnt == 2);
                 Py_DECREF(requirements);
             }
-            // fill in progression
+            /* fill in progression */
             if (check->provides[0].progress != P_NONE) {
                 PyObject *provides = PyList_from_providers(check->provides, ARRAY_SIZE(check->provides));
                 PyObject_SetAttrString(o, "provides", provides);
@@ -134,7 +237,6 @@ error:
     return NULL;
 }
 
-// TODO: change to get_items() and add (type,number) ?
 static PyObject *
 _evermizer_get_items(PyObject *self, PyObject *args)
 {
@@ -182,9 +284,9 @@ _evermizer_get_items(PyObject *self, PyObject *args)
             if (!o) goto error;
             if (((ItemObject*) o)->type != drop->type) continue;
             if (((ItemObject*) o)->index != drop->index) continue;
-            // mark as progression item and fill in progression
+            /* mark as progression item and fill in progression */
             if (drop->provides[0].progress != P_NONE) {
-                // TODO: exclude wings, callbeads, armor and ammo?
+                /* TODO: exclude wings, callbeads, armor and ammo? */
                 ((ItemObject*) o)->progression = true;
                 PyObject *provides = PyList_from_providers(drop->provides, ARRAY_SIZE(drop->provides));
                 PyObject_SetAttrString(o, "provides", provides);
@@ -213,14 +315,14 @@ _evermizer_get_logic(PyObject *self, PyObject *args)
         ((LocationObject*) loc)->type = check->type;
         ((LocationObject*) loc)->index = check->index;
         Py_DECREF(args);
-        // fill in requirements
+        /* fill in requirements */
         if (check->requires[0].progress != P_NONE) {
             PyObject *requirements = PyList_from_requirements(check->requires, ARRAY_SIZE(check->requires));
             PyObject_SetAttrString(loc, "requires", requirements);
             assert(requirements->ob_refcnt == 2);
             Py_DECREF(requirements);
         }
-        // fill in progression
+        /* fill in progression */
         if (check->provides[0].progress != P_NONE) {
             PyObject *provides = PyList_from_providers(check->provides, ARRAY_SIZE(check->provides));
             PyObject_SetAttrString(loc, "provides", provides);
@@ -277,7 +379,7 @@ PyInit__evermizer(void)
         goto type_error;
     }
 
-    // add required constants/enum values to module
+    /* add required constants/enum values to module */
     if (PyModule_AddIntConstant(m, "P_NONE", P_NONE) ||
         PyModule_AddIntConstant(m, "P_WEAPON", P_WEAPON) ||
         PyModule_AddIntConstant(m, "P_ROCK_SKIP", P_ROCK_SKIP) ||
@@ -300,7 +402,7 @@ PyInit__evermizer(void)
     
     return m;
 const_error:
-    // FIXME: do we need to decref the types?
+    /* FIXME: do we need to decref the types? */
 type_error:
     Py_XDECREF(m);
     return NULL;

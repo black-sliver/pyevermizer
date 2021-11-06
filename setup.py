@@ -13,21 +13,30 @@ sources = [src_dir / '_evermizer.c']
 scripts = list(evermizer_dir.glob('patches/*.txt'))
 ips = list(evermizer_dir.glob('ips/*.txt'))
 data = [evermizer_dir / 'gourds.csv']
+tools = [evermizer_dir / 'gourds2h.py', evermizer_dir / 'everscript2h.py', evermizer_dir / 'ips2h.py']
 includes = list(root_dir.glob('*.h')) + list(evermizer_dir.glob('*.h')) + [evermizer_dir / 'main.c']
 generated = [evermizer_dir / 'gourds.h', evermizer_dir / 'gen.h']
-depends = [f for f in scripts + ips + data + includes if f not in generated]
+depends = [f for f in scripts + ips + data + includes + tools if f not in generated]
 
 long_description = (root_dir / 'README.md').read_text(encoding='utf-8')
-c_args = {
-    'unix': ['-Os','-s','-ffunction-sections'],
-    'gcc': ['-Os','-s','-ffunction-sections'],
+debug_c_args = {
+    'unix': ['-Og', '-g'],
+    'gcc': ['-Og', '-g'],
+}
+release_c_args = {
+    'unix': ['-Os', '-s', '-ffunction-sections'],
+    'gcc': ['-Os', '-s', '-ffunction-sections'],
     'msvc': ['/Os'],
-    'mingw32': ['-Os','-s'],
+    'mingw32': ['-Os', '-s'],
 }
-l_args = {
-    'unix': ['-s','-Wl,--gc-sections'],
-    'gcc': ['-s','-Wl,--gc-sections']
+debug_l_args = {
 }
+release_l_args = {
+    'unix': ['-s', '-Wl,--gc-sections'],
+    'gcc': ['-s', '-Wl,--gc-sections']
+}
+c_args = release_c_args
+l_args = release_l_args
 
 evermizer_module = Extension('pyevermizer._evermizer',
     sources = list(map(str, sources)),
