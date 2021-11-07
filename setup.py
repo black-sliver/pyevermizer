@@ -4,6 +4,7 @@ from distutils.command.build_ext import build_ext
 import pathlib
 import subprocess
 import shutil
+import platform
 
 root_dir = pathlib.Path(__file__).parent
 src_dir = root_dir / 'src'
@@ -37,6 +38,11 @@ release_l_args = {
 }
 c_args = release_c_args
 l_args = release_l_args
+
+if platform.system() == 'Darwin':
+    for tool in l_args: # gc-sections not supported by llvm
+      if '-Wl,--gc-sections' in l_args[tool]:
+        l_args[tool].remove('-Wl,--gc-sections')
 
 evermizer_module = Extension('pyevermizer._evermizer',
     sources = list(map(str, sources)),

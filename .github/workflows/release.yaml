@@ -1,0 +1,93 @@
+name: Release-build
+
+#on:
+#  push:
+#    tags:
+#      - 'v*.*.*'
+on: workflow_dispatch
+
+
+jobs:
+
+#  prepare-release:
+#
+#    runs-on: ubuntu-latest
+#
+#    steps:
+#    - name: Set env
+#      run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/v}" >> $GITHUB_ENV
+#    - name: Create Release
+#      uses: softprops/action-gh-release@b7e450da2a4b4cb4bfbae528f788167786cfcedf
+#      with:
+#        draft: true
+#        prerelease: true
+#        name: pyevermizer v${{ env.RELEASE_VERSION }}
+#      env:
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        cibw_python: ["cp38-*", "cp39-*", "cp310-*"] # "cp37-*" disabled for now
+        cibw_arch: ["x86_64", "aarch64", "universal2", "AMD64"]
+        exclude:
+          # no universal2 on ubuntu, no aarch64 on windows
+          - os: ubuntu-latest
+            cibw_arch: universal2
+          - os: macos-latest
+            cibw_arch: aarch64
+          # no py 3.7 for universal2
+          - os: macos-latest
+            cibw_python: "cp37-*"
+            cibw_arch: universal2
+          # AMD64 only on windows
+          - os: ubuntu-latest
+            cibw_arch: AMD64
+          - os: macos-latest
+            cibw_arch: AMD64
+          # windows only on AMD64
+          - os: windows-latest
+            cibw_arch: x86_64
+          - os: windows-latest
+            cibw_arch: aarch64
+          - os: windows-latest
+            cibw_arch: universal2
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 50
+        submodules: recursive
+
+    - name: Set env
+      run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/v}" >> $GITHUB_ENV
+
+    - name: Set up QEMU
+      if: matrix.os == 'ubuntu-latest' && matrix.cibw_arch == 'aarch64'
+      uses: docker/setup-qemu-action@v1
+      with:
+        platforms: arm64
+
+    - uses: pypa/cibuildwheel@v2.1.1
+      env:
+        CIBW_BUILD_VERBOSITY: 1
+        CIBW_BUILD: ${{ matrix.cibw_python }}
+        CIBW_ARCHS: ${{ matrix.cibw_arch }}
+
+    - uses: actions/upload-artifact@v2
+      with:
+        path: ./wheelhouse/*.whl
+
+#    - name: Create Release
+#      uses: softprops/action-gh-release@b7e450da2a4b4cb4bfbae528f788167786cfcedf
+#      with:
+#        draft: true
+#        prerelease: true
+#        name: pyevermizer v${{ env.RELEASE_VERSION }}
+#        files: |
+#          ./wheelhouse/*.whl
+#      env:
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
