@@ -102,6 +102,7 @@ cleanup:
 }
 
 
+#define NO_UI
 #define main evermizer_main
 #define printf(...) fprintf(stdout, __VA_ARGS__)
 #define fprintf evermizer_fprintf
