@@ -1,12 +1,113 @@
 #include <Python.h>
+#include <stdarg.h>
+#include <stdio.h>
 
 #if defined(__CLING__) /* hide evermizer definitions in cppyy */
 namespace _evermizer {
 #define WITH_ASSERT
 #endif
 
+/* NOTE: overwriting printf makes it impossible to run multiple mains
+         concurrently without loading the module multiple times,
+         but luckily it's fast. */
+static PyObject *logger = NULL;
+static PyObject *semaphore = NULL;
+static char *stdoutbuf = NULL;
+#define STDOUT_LOGGER_LEVEL "debug"
+#define STDERR_LOGGER_LEVEL "error"
+
+static int evermizer_fprintf(FILE *f, const char *fmt, ...)
+{
+    int res;
+    char buf[1024];
+    char *heap = NULL;
+    va_list args;
+    va_start(args, fmt);
+    if (logger && (f == stdout || f == stderr)) {
+        const char *level = (f==stdout) ? STDOUT_LOGGER_LEVEL : STDERR_LOGGER_LEVEL;
+        /* try to print to buffer on stack */
+        res = vsnprintf(buf, sizeof(buf), fmt, args);
+        if (res > 0 && (size_t)res < sizeof(buf)) {
+            /* buf valid */
+            if (f == stdout) {
+                size_t buflen = strlen(buf);
+                size_t oldlen = stdoutbuf ? strlen(stdoutbuf) : 0;
+                if (!oldlen && buf[buflen-1] == '\n') {
+                    /* immediately print stdout if buf is empty and chunk ends in \n. optimized most-common case */
+                    buf[buflen-1] = 0;
+                    Py_XDECREF(PyObject_CallMethod(logger, level, "(s)", buf));
+                } else {
+                    /* append to stdoutbuf, see below for printing it */
+                    stdoutbuf = (char*)realloc(stdoutbuf, buflen + oldlen + 1);
+                    if (!stdoutbuf) {
+                        res = -1;
+                        goto cleanup;
+                    }
+                    memcpy(stdoutbuf+oldlen, buf, buflen+1);
+                }
+            } else {
+                /* immediately print stderr chunk */
+                Py_XDECREF(PyObject_CallMethod(logger, level, "(s)", buf));
+            }
+        } else if (res > 0) {
+            /* allocate bigger buffer on heap */
+            heap = (char*)malloc((size_t)res+1);
+            if (heap) {
+                va_end(args);
+                va_start(args, fmt);
+                res = vsnprintf(heap, (size_t)res+1, fmt, args);
+                if (res > 0) {
+                    /* heap valid */
+                    if (f == stdout) {
+                        if (!stdoutbuf) {
+                            /* replace stdoutbuf by new chunk, see below for printing it */
+                            stdoutbuf = heap;
+                            heap = NULL;
+                        } else {
+                            /* append new chunk to stdoutbuf, see below for printing it */
+                            size_t oldlen = strlen(stdoutbuf);
+                            size_t heaplen = strlen(heap);
+                            stdoutbuf = (char*)realloc(stdoutbuf, oldlen + heaplen + 1);
+                            if (!stdoutbuf) {
+                                res = -1;
+                                goto cleanup;
+                            }
+                            memcpy(stdoutbuf + oldlen, heap, heaplen + 1);
+                        }
+                    } else {
+                        /* immediately print stderr chunk */
+                        Py_XDECREF(PyObject_CallMethod(logger, level, "(s)", heap));
+                    }
+                }
+            }
+        }
+        if (f == stdout && stdoutbuf && *stdoutbuf) {
+            /* print stdoutbuf if it ends in newline */
+            size_t newlen = strlen(stdoutbuf);
+            if (stdoutbuf[newlen-1] == '\n') {
+                stdoutbuf[newlen-1] = 0;
+                Py_XDECREF(PyObject_CallMethod(logger, level, "(s)", stdoutbuf));
+                free(stdoutbuf);
+                stdoutbuf = NULL;
+            }
+        }
+    }
+    else {
+        res = vfprintf(f, fmt, args);
+    }
+cleanup:
+    free(heap);
+    va_end(args);
+    return res;
+}
+
+
 #define main evermizer_main
+#define printf(...) fprintf(stdout, __VA_ARGS__)
+#define fprintf evermizer_fprintf
 #include "evermizer/main.c"
+#undef printf
+#undef fprintf
 #undef main
 
 #if defined(__CLING__) /* see above */
@@ -67,6 +168,7 @@ _evermizer_main(PyObject *self, PyObject *py_args)
        TODO: split UI/argument parsing from generation in evermizer, so we don't need to call the C main
     */
 
+    PyObject *pyres = NULL;
     PyObject *osrc, *odst, *oplacement;
     const char *ap_seed, *ap_slot;
     PyObject *oseed; /* any integer -> PyObject */
@@ -74,22 +176,21 @@ _evermizer_main(PyObject *self, PyObject *py_args)
     int money, exp;
     if (!PyArg_ParseTuple(py_args, "O&O&O&ssOsii", path2ansi, &osrc, path2ansi, &odst, path2ansi, &oplacement,
                           &ap_seed, &ap_slot, &oseed, &flags, &money, &exp))
-        return NULL;
+        goto error;
 
     uint64_t seed = (uint64_t)PyLong_AsUnsignedLongLong(oseed);
     if (PyErr_Occurred()) {
         PyErr_Clear();
-        Py_DECREF(osrc);
-        Py_DECREF(odst);
-        Py_DECREF(oplacement);
-        return PyErr_Format(PyExc_TypeError, "6th parameter 'seed' must be unsigned integer type, but got %s",
+        pyres = PyErr_Format(PyExc_TypeError, "6th parameter 'seed' must be unsigned integer type, but got %s",
                             Py_TYPE(oseed)->tp_name);
+        goto cleanup;
     }
-    char sseed[21]; snprintf(sseed, sizeof(sseed), "%" PRIx64, seed);
 
     const char *src = PyBytes_AS_STRING(osrc);
     const char *dst = PyBytes_AS_STRING(odst);
     const char *placement = PyBytes_AS_STRING(oplacement);
+
+    char sseed[21]; snprintf(sseed, sizeof(sseed), "%" PRIx64, seed);
 
     if (exp > 9999) exp = 9999;
     if (exp < 0) exp = 0;
@@ -115,20 +216,53 @@ _evermizer_main(PyObject *self, PyObject *py_args)
         *id_bufp++ = hexchars[((uint8_t)ap_slot[i]>>0)&0x0f];
     }
 
+    /* if multithreading is enabled, wait for the previous thread to finish
+       before touching any globals */
+    if (semaphore) {
+        PyObject *lock = PyObject_CallMethod(semaphore, "acquire", NULL);
+        if (!lock) goto cleanup;
+        Py_DECREF(lock);
+    }
+
+    /* setup printf redirection */
+    assert(!logger);
+    PyObject *logging = PyImport_AddModule("logging");
+    if (!logging) goto cleanup;
+    logger = PyObject_CallMethod(logging, "getLogger", "(s)", "SoE");
+    if (!logger) goto cleanup;
+
     const char *main_args[] = {
         "main", "-b", "-o", dst, "--money", smoney, "--exp", sexp,
         "--id", id_buf, "--placement", placement, src, flags, sseed
     };
 
-    // TODO: verify ap_seed is <= 32 bytes
-    // TODO: capture stderr?
-    int res = evermizer_main(ARRAY_SIZE(main_args), main_args);
+    /* TODO: verify ap_seed is <= 32 bytes */
 
+    pyres = PyLong_FromLong(evermizer_main(ARRAY_SIZE(main_args), main_args));
+
+    /* flush and free stdout redirection buffer */
+    if (stdoutbuf && *stdoutbuf) {
+        Py_XDECREF(PyObject_CallMethod(logger, STDOUT_LOGGER_LEVEL, "(s)", stdoutbuf));
+        free(stdoutbuf);
+        stdoutbuf = NULL;
+    }
+
+    /* cleanup */
+    Py_DECREF(logger);
+    logger = NULL;
+
+    if (semaphore) {
+        PyObject *release = PyObject_CallMethod(semaphore, "release", NULL);
+        if (!release) goto cleanup;
+        Py_DECREF(release);
+    }
+
+cleanup:
     Py_DECREF(osrc);
     Py_DECREF(odst);
     Py_DECREF(oplacement);
-
-    return PyLong_FromLong(res);
+error:
+    return pyres;
 }
 
 static PyObject *PyList_from_requirements(const struct progression_requirement *first, size_t len)
@@ -177,7 +311,7 @@ _evermizer_get_locations(PyObject *self, PyObject *args)
     const size_t na = ARRAY_SIZE(alchemy_locations);
     const size_t location_count = ng + nb + na;
     PyObject *result = PyList_New(location_count);
-    
+
     for (size_t i = 0; i < ng; i++) {
         PyObject *args = Py_BuildValue("(s)", gourd_data[i].name);
         PyObject *loc = PyObject_CallObject((PyObject *) &LocationType, args);
@@ -187,7 +321,7 @@ _evermizer_get_locations(PyObject *self, PyObject *args)
         Py_DECREF(args);
         PyList_SET_ITEM(result, 0+i, loc);
     }
-    
+
     for (size_t i = 0; i < nb; i++) {
         PyObject *args = Py_BuildValue("(s)", boss_names[i]);
         PyObject *loc = PyObject_CallObject((PyObject *) &LocationType, args);
@@ -197,7 +331,7 @@ _evermizer_get_locations(PyObject *self, PyObject *args)
         Py_DECREF(args);
         PyList_SET_ITEM(result, ng+i, loc);
     }
-    
+
     for (size_t i = 0; i < na; i++) {
         PyObject *args = Py_BuildValue("(s)", alchemy_locations[i].name);
         PyObject *loc = PyObject_CallObject((PyObject *) &LocationType, args);
@@ -207,7 +341,7 @@ _evermizer_get_locations(PyObject *self, PyObject *args)
         Py_DECREF(args);
         PyList_SET_ITEM(result, ng+nb+i, loc);
     }
-    
+
     for (size_t i = 0; i < ARRAY_SIZE(blank_check_tree); i++) {
         const struct check_tree_item *check = blank_check_tree + i;
         for (size_t j = 0; j < location_count; j++) {
@@ -246,7 +380,7 @@ _evermizer_get_items(PyObject *self, PyObject *args)
     const size_t na = ARRAY_SIZE(alchemy_locations);
     const size_t item_count = ng + nb + na;
     PyObject *result = PyList_New(item_count);
-    
+
     for (size_t i = 0; i < ng; i++) {
         PyObject *args = Py_BuildValue("(s)", gourd_drops_data[i].name);
         PyObject *item = PyObject_CallObject((PyObject *) &ItemType, args);
@@ -256,7 +390,7 @@ _evermizer_get_items(PyObject *self, PyObject *args)
         Py_DECREF(args);
         PyList_SET_ITEM(result, 0+i, item);
     }
-    
+
     for (size_t i = 0; i < nb; i++) {
         PyObject *args = Py_BuildValue("(s)", boss_drop_names[boss_drops[i]]);
         PyObject *item = PyObject_CallObject((PyObject *) &ItemType, args);
@@ -266,7 +400,7 @@ _evermizer_get_items(PyObject *self, PyObject *args)
         Py_DECREF(args);
         PyList_SET_ITEM(result, ng+i, item);
     }
-    
+
     for (size_t i = 0; i < na; i++) {
         PyObject *args = Py_BuildValue("(s)", alchemy_locations[i].name);
         PyObject *item = PyObject_CallObject((PyObject *) &ItemType, args);
@@ -276,7 +410,7 @@ _evermizer_get_items(PyObject *self, PyObject *args)
         Py_DECREF(args);
         PyList_SET_ITEM(result, ng+nb+i, item);
     }
-    
+
     for (size_t i = 0; i < ARRAY_SIZE(drops); i++) {
         const struct drop_tree_item *drop = drops + i;
         for (size_t j = 0; j < item_count; j++) {
@@ -299,7 +433,6 @@ _evermizer_get_items(PyObject *self, PyObject *args)
 error:
     Py_DECREF(result);
     return NULL;
-
 }
 
 static PyObject *
@@ -359,13 +492,14 @@ PyMODINIT_FUNC
 PyInit__evermizer(void)
 {
     PyObject *m;
-    
+    PyObject *threading;
+
     if (PyType_Ready(&LocationType) < 0) return NULL;
     if (PyType_Ready(&ItemType) < 0) return NULL;
-    
+
     m = PyModule_Create(&_evermizer_module);
     if (!m) return NULL;
-    
+
     Py_INCREF(&LocationType);
     if (PyModule_AddObject(m, "Location", (PyObject *) &LocationType) < 0)
     {
@@ -396,10 +530,20 @@ PyInit__evermizer(void)
     {
         goto const_error;
     }
-    
+
     int slow_burn = 0;
     (void)slow_burn;
-    
+
+    /* initialize global semaphore. we leak this memory */
+    threading = PyImport_AddModule("threading");
+    if (threading) {
+        semaphore = PyObject_CallMethod(threading, "Semaphore", NULL);
+        if (!semaphore) goto const_error;
+    } else {
+        /* threading not built in */
+        PyErr_Clear();
+    }
+
     return m;
 const_error:
     /* FIXME: do we need to decref the types? */
