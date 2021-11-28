@@ -103,6 +103,8 @@ cleanup:
 
 
 #define NO_UI
+#define exit(N) return N
+#define die(...) do { fprintf(stderr, __VA_ARGS__); return 1; } while (0)
 #define main evermizer_main
 #define printf(...) fprintf(stdout, __VA_ARGS__)
 #define fprintf evermizer_fprintf
