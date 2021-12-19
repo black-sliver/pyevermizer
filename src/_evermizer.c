@@ -98,6 +98,7 @@ static int evermizer_fprintf(FILE *f, const char *fmt, ...)
 cleanup:
     free(heap);
     va_end(args);
+    if (PyErr_Occurred()) PyErr_Clear(); // ignore errors for bad printf
     return res;
 }
 
@@ -154,6 +155,8 @@ path2ansi(PyObject *stringOrPath, void* result)
     return 1;
 }
 
+static const char hexchars[] = "0123456789ABCDEF";
+
 /* methods */
 static PyObject *
 _evermizer_main(PyObject *self, PyObject *py_args)
@@ -176,12 +179,24 @@ _evermizer_main(PyObject *self, PyObject *py_args)
     const char *ap_seed, *ap_slot;
     PyObject *oseed; /* any integer -> PyObject */
     const char* flags;
+    uint64_t seed;
     int money, exp;
-    if (!PyArg_ParseTuple(py_args, "O&O&O&ssOsii", path2ansi, &osrc, path2ansi, &odst, path2ansi, &oplacement,
-                          &ap_seed, &ap_slot, &oseed, &flags, &money, &exp))
-        goto error;
+    const char *src;
+    const char *dst;
+    const char *placement;
+    char sseed[21];
+    char sexp[5];
+    char smoney[5];
+    char id_buf[130]; /* hex(32B):hex(32B)\0 */
+    char *id_bufp = id_buf;
+    PyObject *logging;
 
-    uint64_t seed = (uint64_t)PyLong_AsUnsignedLongLong(oseed);
+    if (!PyArg_ParseTuple(py_args, "O&O&O&ssOsii", path2ansi, &osrc, path2ansi, &odst, path2ansi, &oplacement,
+                          &ap_seed, &ap_slot, &oseed, &flags, &money, &exp)) {
+        goto error;
+    }
+
+    seed = (uint64_t)PyLong_AsUnsignedLongLong(oseed);
     if (PyErr_Occurred()) {
         PyErr_Clear();
         pyres = PyErr_Format(PyExc_TypeError, "6th parameter 'seed' must be unsigned integer type, but got %s",
@@ -189,24 +204,21 @@ _evermizer_main(PyObject *self, PyObject *py_args)
         goto cleanup;
     }
 
-    const char *src = PyBytes_AS_STRING(osrc);
-    const char *dst = PyBytes_AS_STRING(odst);
-    const char *placement = PyBytes_AS_STRING(oplacement);
+    src = PyBytes_AS_STRING(osrc);
+    dst = PyBytes_AS_STRING(odst);
+    placement = PyBytes_AS_STRING(oplacement);
 
-    char sseed[21]; snprintf(sseed, sizeof(sseed), "%" PRIx64, seed);
+    snprintf(sseed, sizeof(sseed), "%" PRIx64, seed);
 
     if (exp > 9999) exp = 9999;
     if (exp < 0) exp = 0;
-    char sexp[5]; snprintf(sexp, sizeof(sexp), "%d", exp);
+    snprintf(sexp, sizeof(sexp), "%d", exp);
 
     if (money > 9999) money = 9999;
     if (money < 0) money = 0;
-    char smoney[5]; snprintf(smoney, sizeof(smoney), "%d", money);
+    snprintf(smoney, sizeof(smoney), "%d", money);
 
-    char hexchars[] = "0123456789ABCDEF";
-    char id_buf[130]; /* hex(32B):hex(32B)\0 */
     memset(id_buf, 0, 130);
-    char *id_bufp = id_buf;
     for (uint8_t i=0; i<32; i++) {
         if (!ap_seed[i]) break;
         *id_bufp++ = hexchars[((uint8_t)ap_seed[i]>>4)&0x0f];
@@ -223,40 +235,49 @@ _evermizer_main(PyObject *self, PyObject *py_args)
        before touching any globals */
     if (semaphore) {
         PyObject *lock = PyObject_CallMethod(semaphore, "acquire", NULL);
-        if (!lock) goto cleanup;
+        if (!lock) goto cleanup; // exception
         Py_DECREF(lock);
     }
 
     /* setup printf redirection */
     assert(!logger);
-    PyObject *logging = PyImport_AddModule("logging");
-    if (!logging) goto cleanup;
+    logging = PyImport_AddModule("logging");
+    if (!logging) goto release_lock;
     logger = PyObject_CallMethod(logging, "getLogger", "(s)", "SoE");
-    if (!logger) goto cleanup;
+    if (!logger) goto release_lock;
 
-    const char *main_args[] = {
-        "main", "-b", "-o", dst, "--money", smoney, "--exp", sexp,
-        "--id", id_buf, "--placement", placement, src, flags, sseed
-    };
+    do {
+        const char *main_args[] = {
+            "main", "-b", "-o", dst, "--money", smoney, "--exp", sexp,
+            "--id", id_buf, "--placement", placement, src, flags, sseed
+        };
 
-    /* TODO: verify ap_seed is <= 32 bytes */
+        /* TODO: verify ap_seed is <= 32 bytes */
 
-    pyres = PyLong_FromLong(evermizer_main(ARRAY_SIZE(main_args), main_args));
+        int res = evermizer_main(ARRAY_SIZE(main_args), main_args);
+        pyres = PyLong_FromLong(res);
+    } while (false);
 
     /* flush and free stdout redirection buffer */
-    if (stdoutbuf && *stdoutbuf) {
+    if (!PyErr_Occurred() && stdoutbuf && *stdoutbuf) {
         Py_XDECREF(PyObject_CallMethod(logger, STDOUT_LOGGER_LEVEL, "(s)", stdoutbuf));
-        free(stdoutbuf);
-        stdoutbuf = NULL;
+        if (PyErr_Occurred()) PyErr_Clear(); // ignore errors for bad printf
     }
+    free(stdoutbuf);
+    stdoutbuf = NULL;
 
     /* cleanup */
     Py_DECREF(logger);
     logger = NULL;
 
+release_lock:
     if (semaphore) {
         PyObject *release = PyObject_CallMethod(semaphore, "release", NULL);
-        if (!release) goto cleanup;
+        if (!release) {
+            Py_DECREF(pyres);
+            pyres = NULL; // exception
+            goto cleanup;
+        }
         Py_DECREF(release);
     }
 
@@ -534,13 +555,10 @@ PyInit__evermizer(void)
         goto const_error;
     }
 
-    int slow_burn = 0;
-    (void)slow_burn;
-
     /* initialize global semaphore. we leak this memory */
     threading = PyImport_AddModule("threading");
     if (threading) {
-        semaphore = PyObject_CallMethod(threading, "Semaphore", NULL);
+        semaphore = PyObject_CallMethod(threading, "BoundedSemaphore", NULL);
         if (!semaphore) goto const_error;
     } else {
         /* threading not built in */
