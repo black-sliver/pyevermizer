@@ -15,13 +15,14 @@ https://github.com/black-sliver/evermizer
   
 ## Import from package
 
-* Clone, build and install a wheel using
+* Download a [release](https://github.com/black-sliver/pyevermizer/releases) and `pip install` it
+
+* Or clone, build and install a wheel using
   ```
   git clone https://github.com/black-sliver/pyevermizer --recurse-submodules
   python3 -m build --wheel
   pip install dist/*.whl
   ```
-  (prebuilt wheels not available yet)
 
 ## API
 
