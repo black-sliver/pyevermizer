@@ -85,13 +85,13 @@ class EvermizerExtBuilder(EvermizerPreBuild, build_ext):
 
 setup (name = 'pyevermizer',
        author = 'black-sliver',
-       version = '0.40.0',
+       version = '0.41.0',
        description = 'Python wrapper for Evermizer',
        long_description = long_description,
        long_description_content_type='text/markdown',
        license = 'LGPLv3',
        url = 'https://github.com/black-sliver/pyevermizer',
-       python_requires='>=3', # TODO: test this
+       python_requires='>=3',  # TODO: test this
        packages = ['pyevermizer'],
        package_dir = {'pyevermizer': str(src_dir)},
        ext_modules = [evermizer_module],
