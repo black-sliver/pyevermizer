@@ -3,7 +3,7 @@ import pathlib
 import distutils.core
 import traceback
 
-FORCE_FALLBACK = False #True
+FORCE_FALLBACK = False  # True
 
 # you can directly import the repository as a module, which
 # 1. tries to build native code in place, 2. tries to run it through cppyy
