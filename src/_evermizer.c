@@ -475,6 +475,27 @@ error:
 }
 
 static PyObject *
+_evermizer_get_traps(PyObject *sef, PyObject *args)
+{
+    const size_t trap_count = ARRAY_SIZE(trap_data);
+    PyObject *result = PyList_New(trap_count);
+
+    for (size_t i = 0; i < trap_count; i++) {
+        PyObject *args = Py_BuildValue("(s)", trap_data[i].name);
+        PyObject *item = PyObject_CallObject((PyObject *) &ItemType, args);
+        if (!item) goto error;
+        ((ItemObject*) item)->type = CHECK_TRAP;
+        ((ItemObject*) item)->index = (unsigned short)i;
+        Py_DECREF(args);
+        PyList_SET_ITEM(result, i, item);
+    }
+    return result;
+error:
+    Py_DECREF(result);
+    return NULL;
+}
+
+static PyObject *
 _evermizer_get_logic(PyObject *self, PyObject *args)
 {
     const size_t n = ARRAY_SIZE(blank_check_tree);
@@ -514,6 +535,7 @@ static PyMethodDef _evermizer_methods[] = {
     {"main", _evermizer_main, METH_VARARGS, "Run ROM generation"},
     {"get_locations", _evermizer_get_locations, METH_NOARGS, "Returns list of locations"},
     {"get_items", _evermizer_get_items, METH_NOARGS, "Returns list of items"},
+    {"get_traps", _evermizer_get_traps, METH_NOARGS, "Returns trap items"},
     {"get_logic", _evermizer_get_logic, METH_NOARGS, "Returns the check tree, which is list of all logic rules, including locations"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
@@ -565,8 +587,9 @@ PyInit__evermizer(void)
         PyModule_AddIntConstant(m, "CHECK_BOSS", CHECK_BOSS) ||
         PyModule_AddIntConstant(m, "CHECK_GOURD", CHECK_GOURD) ||
         PyModule_AddIntConstant(m, "CHECK_NPC", CHECK_NPC) ||
-        PyModule_AddIntConstant(m, "CHECK_RULE", CHECK_RULE))
-    {
+        PyModule_AddIntConstant(m, "CHECK_RULE", CHECK_RULE) ||
+        PyModule_AddIntConstant(m, "CHECK_TRAP", CHECK_TRAP)
+    ) {
         goto const_error;
     }
 
