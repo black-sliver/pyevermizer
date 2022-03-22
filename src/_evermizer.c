@@ -98,7 +98,7 @@ static int evermizer_fprintf(FILE *f, const char *fmt, ...)
 cleanup:
     free(heap);
     va_end(args);
-    if (PyErr_Occurred()) PyErr_Clear(); // ignore errors for bad printf
+    if (PyErr_Occurred()) PyErr_Clear(); /* ignore errors for bad printf */
     return res;
 }
 
@@ -162,7 +162,7 @@ static PyObject *
 _evermizer_main(PyObject *self, PyObject *py_args)
 {
     /* _evermizer.main call signature:
-        src: Path, dst: Path, placement: Path, apseed: str, apslot: str, seed: int, flags: str, money: int, exp: int
+        src: Path, dst: Path, placement: Path, apseed: str, apslot: str, seed: int, flags: str, money: int, exp: int, switches: list[string]
     */
 
     /* original main signature:
@@ -170,6 +170,7 @@ _evermizer_main(PyObject *self, PyObject *py_args)
        mapped main signature:
           15, { "evermizer", '-b", "-o", "<dst.sfc>", "--money", "<money%>", "--exp', "<exp%>",
                "--id", "<hex(32B ap seed)>[:]<hex(32B ap slot)>", "--placement", "<placement.txt>",
+               [switches...,]
                "<src.sfc>", "<flags>", "<seed>" }
        TODO: split UI/argument parsing from generation in evermizer, so we don't need to call the C main
     */
@@ -178,6 +179,7 @@ _evermizer_main(PyObject *self, PyObject *py_args)
     PyObject *osrc, *odst, *oplacement;
     const char *ap_seed, *ap_slot;
     PyObject *oseed; /* any integer -> PyObject */
+    PyObject *switches;
     const char* flags;
     uint64_t seed;
     int money, exp;
@@ -191,8 +193,8 @@ _evermizer_main(PyObject *self, PyObject *py_args)
     char *id_bufp = id_buf;
     PyObject *logging;
 
-    if (!PyArg_ParseTuple(py_args, "O&O&O&ssOsii", path2ansi, &osrc, path2ansi, &odst, path2ansi, &oplacement,
-                          &ap_seed, &ap_slot, &oseed, &flags, &money, &exp)) {
+    if (!PyArg_ParseTuple(py_args, "O&O&O&ssOsiiO", path2ansi, &osrc, path2ansi, &odst, path2ansi, &oplacement,
+                          &ap_seed, &ap_slot, &oseed, &flags, &money, &exp, &switches)) {
         goto error;
     }
 
@@ -247,14 +249,27 @@ _evermizer_main(PyObject *self, PyObject *py_args)
     if (!logger) goto release_lock;
 
     do {
-        const char *main_args[] = {
+        Py_ssize_t switches_len = PyList_Size(switches);
+        size_t argc = 15 + switches_len;
+        const char *argv[25] = {
             "main", "-b", "-o", dst, "--money", smoney, "--exp", sexp,
-            "--id", id_buf, "--placement", placement, src, flags, sseed
+            "--id", id_buf, "--placement", placement
         };
+        if (switches_len < 0 || argc >= ARRAY_SIZE(argv)) {
+            PyErr_SetString(PyExc_RuntimeError, "Too many switches to main!");
+            break;
+        }
+        for (Py_ssize_t i=0; i<switches_len; i++) {
+            PyObject* sw = PyList_GetItem(switches, i);
+            argv[12+i] = PyUnicode_AsUTF8(sw);
+        }
+        argv[argc-3] = src;
+        argv[argc-2] = flags;
+        argv[argc-1] = sseed;
 
         /* TODO: verify ap_seed is <= 32 bytes */
 
-        int res = evermizer_main(ARRAY_SIZE(main_args), main_args);
+        int res = evermizer_main((int)argc, argv);
         pyres = PyLong_FromLong(res);
     } while (false);
 
