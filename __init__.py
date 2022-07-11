@@ -9,7 +9,8 @@ FORCE_FALLBACK = False  # True
 # 1. tries to build native code in place, 2. tries to run it through cppyy
 _cwd = os.getcwd()
 try:
-    if FORCE_FALLBACK: raise Exception('building disabled')
+    if FORCE_FALLBACK:
+        raise Exception('building disabled')
     _dir = pathlib.Path(__file__).parent.resolve()
     os.chdir(_dir)
     distutils.core.run_setup('setup.py').run_command('build_ext')
@@ -21,7 +22,7 @@ finally:
     os.chdir(_cwd)
 
 # clean up globals
-del(globals()['traceback'])
-del(globals()['distutils'])
-del(globals()['pathlib'])
-del(globals()['os'])
+del (globals()['traceback'])
+del (globals()['distutils'])
+del (globals()['pathlib'])
+del (globals()['os'])
