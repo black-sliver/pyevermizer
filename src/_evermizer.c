@@ -410,6 +410,33 @@ error:
     return NULL;
 }
 
+static bool
+is_actual_progress(enum progression p)
+{
+    /* work around some items being tracked for difficulty that are not actual progression */
+    /* NOTE: we could resolve the tree to see if it has progression impact */
+    if (p == P_NONE) return false;
+    if (p == P_ARMOR) return false;
+    if (p == P_OFFENSIVE_FORMULA) return false; /* until they are put in logic */
+    if (p == P_PASSIVE_FORMULA) return false;
+    if (p == P_AMMO) return false;
+    if (p == P_GLITCHED_AMMO) return false;
+    if (p == P_CALLBEAD) return false;
+    if (p == P_WINGS) return false;
+    if (p == P_ATLAS) return false;
+    return true;
+}
+
+static bool
+is_drop_actual_progress(const drop_tree_item *drop)
+{
+    for (size_t i=0; i<ARRAY_SIZE(drop->provides); i++) {
+        if (drop->provides[i].progress == P_NONE) break;
+        if (is_actual_progress(drop->provides[i].progress)) return true;
+    }
+    return false;
+}
+
 static PyObject *
 _evermizer_get_items(PyObject *self, PyObject *args)
 {
@@ -459,8 +486,8 @@ _evermizer_get_items(PyObject *self, PyObject *args)
             if (((ItemObject*) o)->index != drop->index) continue;
             /* mark as progression item and fill in progression */
             if (drop->provides[0].progress != P_NONE) {
-                /* TODO: exclude wings, callbeads, armor and ammo? */
-                ((ItemObject*) o)->progression = true;
+                ((ItemObject*) o)->progression = is_drop_actual_progress(drop);
+                ((ItemObject*) o)->useful = true;
                 PyObject *provides = PyList_from_providers(drop->provides, ARRAY_SIZE(drop->provides));
                 PyObject_SetAttrString(o, "provides", provides);
                 assert(provides->ob_refcnt == 2);

@@ -8,6 +8,7 @@ typedef struct {
     PyObject_HEAD
     PyObject *name;
     char progression;
+    char useful;
     enum check_tree_item_type type;
     unsigned short index; 
     PyObject *provides;
@@ -33,9 +34,10 @@ Item_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         Py_DECREF(self);
         return NULL;
     }
-    
+
     self->progression = 0;
-    
+    self->useful = 0;
+
     self->provides = PyList_New(0);
     if (self->provides == NULL) {
         // FIXME: do we need to decref name?
@@ -69,6 +71,7 @@ Item_init(ItemObject *self, PyObject *args, PyObject *kwds)
 static PyMemberDef Item_members[] = {
     {"name", T_OBJECT_EX, offsetof(ItemObject, name), 1, "Item name"},
     {"progression", T_BOOL, offsetof(ItemObject, progression), 1, "Item is a progression item"},
+    {"useful", T_BOOL, offsetof(ItemObject, useful), 1, "Item is a useful item"},
     {"type", T_INT, offsetof(ItemObject, type), 1, "Location type of vanilla item"},
     {"index", T_USHORT, offsetof(ItemObject, index), 1, "Nth location of type"},
     {"provides", T_OBJECT_EX, offsetof(LocationObject, provides), 0, "List of tuples (amount, progression) providers"},
