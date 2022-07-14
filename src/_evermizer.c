@@ -424,6 +424,7 @@ is_actual_progress(enum progression p)
     if (p == P_CALLBEAD) return false;
     if (p == P_WINGS) return false;
     if (p == P_ATLAS) return false;
+    if (p == P_BAZOOKA) return false;
     return true;
 }
 
