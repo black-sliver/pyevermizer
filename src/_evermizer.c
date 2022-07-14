@@ -438,9 +438,20 @@ is_drop_actual_progress(const drop_tree_item *drop)
     return false;
 }
 
+static bool
+is_extra_actual_progress(const extra_item *extra)
+{
+    for (size_t i=0; i<ARRAY_SIZE(extra->provides); i++) {
+        if (extra->provides[i].progress == P_NONE) break;
+        if (is_actual_progress(extra->provides[i].progress)) return true;
+    }
+    return false;
+}
+
 static PyObject *
 _evermizer_get_items(PyObject *self, PyObject *args)
 {
+    /* return list of items that are part of the default pool */
     enum boss_drop_indices boss_drops[] = BOSS_DROPS;
     const size_t ng = ARRAY_SIZE(gourd_drops_data);
     const size_t nb = ARRAY_SIZE(boss_drops);
@@ -503,8 +514,40 @@ error:
 }
 
 static PyObject *
+_evermizer_get_extra_items(PyObject *sef, PyObject *args)
+{
+    /* return list of supported items that are not placed by default */
+    const size_t extra_count = ARRAY_SIZE(extra_data);
+    PyObject *result = PyList_New(extra_count);
+
+    for (size_t i = 0; i < extra_count; i++) {
+        const struct extra_item *extra = extra_data + i;
+        PyObject *args = Py_BuildValue("(s)", extra->name);
+        PyObject *item = PyObject_CallObject((PyObject *) &ItemType, args);
+        if (!item) goto error;
+        ((ItemObject*) item)->type = CHECK_EXTRA;
+        ((ItemObject*) item)->index = (unsigned short)i;
+        if (extra->provides[0].progress != P_NONE) {
+            ((ItemObject*) item)->progression = is_extra_actual_progress(extra);
+            ((ItemObject*) item)->useful = true;
+            PyObject *provides = PyList_from_providers(extra->provides, ARRAY_SIZE(extra->provides));
+            PyObject_SetAttrString(item, "provides", provides);
+            assert(provides->ob_refcnt == 2);
+            Py_DECREF(provides);
+        }
+        Py_DECREF(args);
+        PyList_SET_ITEM(result, i, item);
+    }
+    return result;
+error:
+    Py_DECREF(result);
+    return NULL;
+}
+
+static PyObject *
 _evermizer_get_traps(PyObject *sef, PyObject *args)
 {
+    /* return list of traps that are not placed by default */
     const size_t trap_count = ARRAY_SIZE(trap_data);
     PyObject *result = PyList_New(trap_count);
 
@@ -562,7 +605,8 @@ error:
 static PyMethodDef _evermizer_methods[] = {
     {"main", _evermizer_main, METH_VARARGS, "Run ROM generation"},
     {"get_locations", _evermizer_get_locations, METH_NOARGS, "Returns list of locations"},
-    {"get_items", _evermizer_get_items, METH_NOARGS, "Returns list of items"},
+    {"get_items", _evermizer_get_items, METH_NOARGS, "Returns list of default items"},
+    {"get_extra_items", _evermizer_get_extra_items, METH_NOARGS, "Returns list of items not placed by default"},
     {"get_traps", _evermizer_get_traps, METH_NOARGS, "Returns trap items"},
     {"get_logic", _evermizer_get_logic, METH_NOARGS, "Returns the check tree, which is list of all logic rules, including locations"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
@@ -608,6 +652,7 @@ PyInit__evermizer(void)
         PyModule_AddIntConstant(m, "P_ROCK_SKIP", P_ROCK_SKIP) ||
         PyModule_AddIntConstant(m, "P_ROCKET", P_ROCKET) ||
         PyModule_AddIntConstant(m, "P_ENERGY_CORE", P_ENERGY_CORE) ||
+        PyModule_AddIntConstant(m, "P_CORE_FRAGMENT", P_CORE_FRAGMENT) ||
         PyModule_AddIntConstant(m, "P_FINAL_BOSS", P_FINAL_BOSS) ||
         PyModule_AddIntConstant(m, "P_JAGUAR_RING", P_JAGUAR_RING) ||
         PyModule_AddIntConstant(m, "CHECK_NONE", CHECK_NONE) ||
@@ -616,6 +661,7 @@ PyInit__evermizer(void)
         PyModule_AddIntConstant(m, "CHECK_GOURD", CHECK_GOURD) ||
         PyModule_AddIntConstant(m, "CHECK_NPC", CHECK_NPC) ||
         PyModule_AddIntConstant(m, "CHECK_RULE", CHECK_RULE) ||
+        PyModule_AddIntConstant(m, "CHECK_EXTRA", CHECK_EXTRA) ||
         PyModule_AddIntConstant(m, "CHECK_TRAP", CHECK_TRAP)
     ) {
         goto const_error;
