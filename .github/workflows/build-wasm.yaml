@@ -27,7 +27,9 @@ jobs:
       - name: Copy evermizer
         shell: bash
         run: |
-            cp -r src/evermizer pyodide/packages/pyevermizer/
+            sudo chmod 755 pyodide pyodide/packages pyodide/packages/pyevermizer
+            sudo cp -r src/evermizer pyodide/packages/pyevermizer/
+            sudo chmod -R 755 pyodide/packages/pyevermizer
       - name: Build package
         uses: jobovy/pyodide-buildpackage-action/actions/build-package@v1
       # Just make everything executable, because a bunch of stuff needs to be
