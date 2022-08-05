@@ -104,6 +104,7 @@ cleanup:
 
 
 #define NO_UI
+#define WITH_MULTIWORLD /* force on for wasm support */
 #define exit(N) return N
 #define die(...) do { fprintf(stderr, __VA_ARGS__); return 1; } while (0)
 #define main evermizer_main
