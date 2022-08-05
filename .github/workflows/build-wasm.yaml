@@ -1,0 +1,44 @@
+name: Build wasm wheel
+
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - uses: actions/cache@v3
+        id: cache-pyodide
+        with:
+          path: pyodide/**
+          key: pyodide-cache-0.20.0
+      - name: Build pyodide
+        uses: jobovy/pyodide-buildpackage-action/actions/build-pyodide@v1
+        with:
+          pyodide-tag: 0.20.0
+          pyodide-cache-hit: ${{ steps.cache-pyodide.outputs.cache-hit }}
+      - name: Build meta.yaml
+        uses: jobovy/pyodide-buildpackage-action/actions/build-meta@v1
+        with:
+          meta-yaml-path: .github/pyodide_meta.yaml
+      - name: Copy evermizer
+        shell: bash
+        run: |
+            cp -r src/evermizer pyodide/packages/pyevermizer/
+      - name: Build package
+        uses: jobovy/pyodide-buildpackage-action/actions/build-package@v1
+      # Just make everything executable, because a bunch of stuff needs to be
+      # and it isn't altogether obvious which (not just .sh)
+      - name: Change permissions of pyodide directory
+        shell: bash
+        run: |
+          sudo find pyodide -type d -exec chmod 755 {} \;
+          sudo find pyodide -type f -exec chmod 755 {} \;
+      - uses: actions/upload-artifact@v2-preview
+        with:
+          name: package-wheel-pyodide
+          path: wheelhouse/*.whl
+
