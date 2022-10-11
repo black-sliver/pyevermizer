@@ -40,18 +40,21 @@ c_args = release_c_args
 l_args = release_l_args
 
 if platform.system() == 'Darwin':
-    for tool in l_args: # gc-sections not supported by llvm
-      if '-Wl,--gc-sections' in l_args[tool]:
-        l_args[tool].remove('-Wl,--gc-sections')
+    for tool in l_args:  # gc-sections not supported by llvm
+        if '-Wl,--gc-sections' in l_args[tool]:
+            l_args[tool].remove('-Wl,--gc-sections')
 
-evermizer_module = Extension('pyevermizer._evermizer',
-    sources = list(map(str, sources)),
-    depends = list(map(str, depends)),
-    define_macros = [('NO_ASSERT',1), ('NDEBUG',1)])
+evermizer_module = Extension(
+    'pyevermizer._evermizer',
+    sources=list(map(str, sources)),
+    depends=list(map(str, depends)),
+    define_macros=[('NO_ASSERT', 1), ('NDEBUG', 1)])
 
-class EvermizerPreBuild():
+
+class EvermizerPreBuild:
     """Custom build mixin to run pre-build steps for evermizer"""
-    def prebuild(self):
+    @staticmethod
+    def prebuild():
         print('Running pre-build steps...')
         py = 'py' if shutil.which('py') else 'python'
         for script, args in (
@@ -65,12 +68,14 @@ class EvermizerPreBuild():
                 print(res.stdout.decode('utf-8'), end='')
             except Exception as ex:
                 print('\n' + ex.output.decode('utf-8'))
-                raise(ex)
+                raise
+
 
 class EvermizerExtBuilder(EvermizerPreBuild, build_ext):
     def run(self):
         self.prebuild()
         return build_ext.run(self)
+
     def build_extensions(self):
         c = self.compiler.compiler_type
         if c not in c_args and c not in l_args:
@@ -83,17 +88,17 @@ class EvermizerExtBuilder(EvermizerPreBuild, build_ext):
                 e.extra_link_args = l_args[c]
         return build_ext.build_extensions(self)
 
-setup (name = 'pyevermizer',
-       author = 'black-sliver',
-       version = '0.41.3',
-       description = 'Python wrapper for Evermizer',
-       long_description = long_description,
-       long_description_content_type='text/markdown',
-       license = 'LGPLv3',
-       url = 'https://github.com/black-sliver/pyevermizer',
-       python_requires='>=3',  # TODO: test this
-       packages = ['pyevermizer'],
-       package_dir = {'pyevermizer': str(src_dir)},
-       ext_modules = [evermizer_module],
-       cmdclass={'build_ext': EvermizerExtBuilder})
 
+setup(name='pyevermizer',
+      author='black-sliver',
+      version='0.41.3',
+      description='Python wrapper for Evermizer',
+      long_description=long_description,
+      long_description_content_type='text/markdown',
+      license='LGPLv3',
+      url='https://github.com/black-sliver/pyevermizer',
+      python_requires='>=3',  # TODO: test this
+      packages=['pyevermizer'],
+      package_dir={'pyevermizer': str(src_dir)},
+      ext_modules=[evermizer_module],
+      cmdclass={'build_ext': EvermizerExtBuilder})
