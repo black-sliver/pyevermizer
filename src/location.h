@@ -8,7 +8,8 @@ typedef struct {
     PyObject_HEAD
     PyObject *name;
     enum check_tree_item_type type;
-    unsigned short index; 
+    unsigned short index;
+    char difficulty;
     PyObject *requires;
     PyObject *provides;
 } LocationObject;
@@ -73,6 +74,7 @@ static PyMemberDef Location_members[] = {
     {"name", T_OBJECT_EX, offsetof(LocationObject, name), 0, "Location name"},
     {"type", T_INT, offsetof(LocationObject, type), 1, "Location type of vanilla item"},
     {"index", T_USHORT, offsetof(LocationObject, index), 1, "Nth location of type"},
+    {"difficulty", T_BYTE, offsetof(LocationObject, difficulty), 1, "Difficulty 0..2 for bad/hidden checks"},
     {"requires", T_OBJECT_EX, offsetof(LocationObject, requires), 0, "List of tuples (amount, progression) requirements"},
     {"provides", T_OBJECT_EX, offsetof(LocationObject, provides), 0, "Lift of tuples (amount, progression) providers"},
     {NULL}

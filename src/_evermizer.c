@@ -404,6 +404,8 @@ _evermizer_get_locations(PyObject *self, PyObject *args)
                 assert(provides->ob_refcnt == 2);
                 Py_DECREF(provides);
             }
+            /* fill in difficulty (e.g. hidden chest) */
+            ((LocationObject*) o)->difficulty = check->difficulty;
         }
     }
     return result;
