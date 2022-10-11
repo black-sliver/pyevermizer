@@ -163,7 +163,7 @@ static PyObject *
 _evermizer_main(PyObject *self, PyObject *py_args)
 {
     /* _evermizer.main call signature:
-        src: Path, dst: Path, placement: Path, apseed: str, apslot: str, seed: int, flags: str, money: int, exp: int, switches: list[string]
+        src: Path, dst: Path, placement: Path, apseed: str, apslot: str, seed: int, flags: str, money: int, exp: int, switches: list[str]
     */
 
     /* original main signature:
@@ -296,7 +296,6 @@ release_lock:
         }
         Py_DECREF(release);
     }
-
 cleanup:
     Py_DECREF(osrc);
     Py_DECREF(odst);
@@ -305,7 +304,8 @@ error:
     return pyres;
 }
 
-static PyObject *PyList_from_requirements(const struct progression_requirement *first, size_t len)
+static PyObject *
+PyList_from_requirements(const struct progression_requirement *first, size_t len)
 {
     PyObject *list = PyList_New(0);
     if (list == NULL) return NULL;
@@ -324,7 +324,8 @@ static PyObject *PyList_from_requirements(const struct progression_requirement *
     return list;
 }
 
-static PyObject *PyList_from_providers(const struct progression_provider *first, size_t len)
+static PyObject *
+PyList_from_providers(const struct progression_provider *first, size_t len)
 {
     PyObject *list = PyList_New(0);
     if (list == NULL) return NULL;
@@ -669,9 +670,10 @@ PyInit__evermizer(void)
     }
 
     /* initialize global semaphore. we leak this memory */
-    threading = PyImport_AddModule("threading");
+    threading = PyImport_ImportModule("threading");
     if (threading) {
         semaphore = PyObject_CallMethod(threading, "BoundedSemaphore", NULL);
+        Py_DECREF(threading);
         if (!semaphore) goto const_error;
     } else {
         /* threading not built in */
