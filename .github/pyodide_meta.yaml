@@ -1,12 +1,12 @@
 # build info for pyodide
 package:
   name: pyevermizer
-  version: 0.41.3
+  version: 0.42.0
 
 source:
   # this will get replaced by build-meta
-  sha256: ab8117fdc8758fdfab6027eaf12ac54b2e95058018fa662d89d16d97d2f2e7a5
-  url: https://github.com/black-sliver/pyevermizer/releases/download/v0.41.3/pyevermizer-0.41.3.tar.gz
+  sha256: 28c13bbeb6df091c0a58c1b172fdafe6741f00dc0029e64946c02688526d5b84
+  url: https://github.com/black-sliver/pyevermizer/releases/download/v0.42.0/pyevermizer-0.42.0.tar.gz
 
 build:
   # override evermizer. this is used by the build action to resolve submodules
