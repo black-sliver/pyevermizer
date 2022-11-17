@@ -6,7 +6,7 @@ import subprocess
 import shutil
 import platform
 
-root_dir = pathlib.Path(__file__).parent
+root_dir = pathlib.Path(__file__).parent.relative_to(pathlib.Path.cwd())
 src_dir = root_dir / 'src'
 evermizer_dir = src_dir / 'evermizer'
 
