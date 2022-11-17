@@ -3,7 +3,8 @@ name: Test pip install
 on: workflow_dispatch
 
 env:
-  VERSION: 0.42.0
+  TAG: v0.42.0
+  VERSION: 0.42.0-1
 
 jobs:
   pip-install-source:
@@ -34,4 +35,4 @@ jobs:
       shell: bash
       run: |
         python --version
-        python -m pip install https://github.com/black-sliver/pyevermizer/releases/download/v$VERSION/pyevermizer-$VERSION.tar.gz
+        python -m pip install https://github.com/black-sliver/pyevermizer/releases/download/$TAG/pyevermizer-$VERSION.tar.gz
