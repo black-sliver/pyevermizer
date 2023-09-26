@@ -10,7 +10,6 @@ on:
 jobs:
 
   prepare_release:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -24,6 +23,7 @@ jobs:
         name: pyevermizer v${{ env.RELEASE_VERSION }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
   build_sdist:
     runs-on: ubuntu-latest
