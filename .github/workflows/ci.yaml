@@ -56,7 +56,7 @@ jobs:
 
     - name: Test wheel
       run: |
-        python -m pip uninstall pyevermizer
+        python -m pip uninstall -y pyevermizer
         python -m pip install dist/*
         python -c "import pyevermizer"
 
