@@ -1,7 +1,7 @@
 # build info for pyodide
 package:
   name: pyevermizer
-  version: 0.42.0
+  version: 0.44.0
 
 source:
   # this will get replaced by build-meta
