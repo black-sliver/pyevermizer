@@ -1,6 +1,5 @@
-import os
-from distutils.core import setup, Extension
-from distutils.command.build_ext import build_ext
+from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext
 import pathlib
 import subprocess
 import shutil
