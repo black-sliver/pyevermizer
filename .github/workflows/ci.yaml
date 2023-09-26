@@ -57,6 +57,7 @@ jobs:
         python -c "import pyevermizer"
 
     - name: Test wheel
+      shell: bash
       run: |
         python -m pip uninstall -y pyevermizer
         python -m pip install dist/*
