@@ -311,7 +311,7 @@ PyList_from_requirements(const struct progression_requirement *first, size_t len
     if (list == NULL) return NULL;
 
     for (size_t i = 0; i < len; i++) {
-        if (first[i].progress != P_NONE && first[i].pieces > 0) {
+        if (first[i].progress != P_NONE && first[i].pieces != 0) {
             PyObject *pair = Py_BuildValue("ii", first[i].pieces,
                                                  first[i].progress);
             PyList_Append(list, pair);
@@ -331,7 +331,7 @@ PyList_from_providers(const struct progression_provider *first, size_t len)
     if (list == NULL) return NULL;
 
     for (size_t i = 0; i < len; i++) {
-        if (first[i].progress != P_NONE && first[i].pieces > 0) {
+        if (first[i].progress != P_NONE && first[i].pieces != 0) {
             PyObject *pair = Py_BuildValue("ii", first[i].pieces,
                                                  first[i].progress);
             PyList_Append(list, pair);
@@ -653,12 +653,14 @@ PyInit__evermizer(void)
     /* add required constants/enum values to module */
     if (PyModule_AddIntConstant(m, "P_NONE", P_NONE) ||
         PyModule_AddIntConstant(m, "P_WEAPON", P_WEAPON) ||
-        PyModule_AddIntConstant(m, "P_ROCK_SKIP", P_ROCK_SKIP) ||
+        PyModule_AddIntConstant(m, "P_ALLOW_SEQUENCE_BREAKS", P_ALLOW_SEQUENCE_BREAKS) ||
+        PyModule_AddIntConstant(m, "P_ALLOW_OOB", P_ALLOW_OOB) ||
         PyModule_AddIntConstant(m, "P_ROCKET", P_ROCKET) ||
         PyModule_AddIntConstant(m, "P_ENERGY_CORE", P_ENERGY_CORE) ||
         PyModule_AddIntConstant(m, "P_CORE_FRAGMENT", P_CORE_FRAGMENT) ||
         PyModule_AddIntConstant(m, "P_FINAL_BOSS", P_FINAL_BOSS) ||
         PyModule_AddIntConstant(m, "P_JAGUAR_RING", P_JAGUAR_RING) ||
+        PyModule_AddIntConstant(m, "P_REVEALER", P_REVEALER) ||
         PyModule_AddIntConstant(m, "CHECK_NONE", CHECK_NONE) ||
         PyModule_AddIntConstant(m, "CHECK_ALCHEMY", CHECK_ALCHEMY) ||
         PyModule_AddIntConstant(m, "CHECK_BOSS", CHECK_BOSS) ||
