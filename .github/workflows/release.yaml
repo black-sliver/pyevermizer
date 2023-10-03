@@ -100,7 +100,7 @@ jobs:
       with:
         platforms: arm64
 
-    - uses: pypa/cibuildwheel@v2
+    - uses: pypa/cibuildwheel@v2.16.2
       env:
         CIBW_BUILD_VERBOSITY: 1
         CIBW_BUILD: ${{ matrix.cibw_python }}
