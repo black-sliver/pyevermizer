@@ -573,10 +573,17 @@ error:
 static PyObject *
 _evermizer_get_logic(PyObject *self, PyObject *args)
 {
-    const size_t n = ARRAY_SIZE(blank_check_tree);
-    PyObject *result = PyList_New(n);
-    for (size_t i = 0; i < n; i++) {
+    size_t n = 0;
+    for (size_t i = 0; i < ARRAY_SIZE(blank_check_tree); i++) {
         const struct check_tree_item *check = blank_check_tree + i;
+        if (check->provides[0].progress == P_NONE) continue; /* skip locations with no direct progression in logic */
+        n++;
+    }
+
+    PyObject *result = PyList_New(n);
+    for (size_t i = 0, j = 0; i < ARRAY_SIZE(blank_check_tree); i++) {
+        const struct check_tree_item *check = blank_check_tree + i;
+        if (check->provides[0].progress == P_NONE) continue; /* skip locations with no direct progression in logic */
         PyObject *args = Py_BuildValue("(s)", "");
         PyObject *loc = PyObject_CallObject((PyObject *) &LocationType, args);
         if (!loc) goto error;
@@ -597,7 +604,8 @@ _evermizer_get_logic(PyObject *self, PyObject *args)
             assert(provides->ob_refcnt == 2);
             Py_DECREF(provides);
         }
-        PyList_SET_ITEM(result, i, loc);
+        PyList_SET_ITEM(result, j, loc);
+        j++;
     }
     return result;
 error:
@@ -612,7 +620,7 @@ static PyMethodDef _evermizer_methods[] = {
     {"get_items", _evermizer_get_items, METH_NOARGS, "Returns list of default items"},
     {"get_extra_items", _evermizer_get_extra_items, METH_NOARGS, "Returns list of items not placed by default"},
     {"get_traps", _evermizer_get_traps, METH_NOARGS, "Returns trap items"},
-    {"get_logic", _evermizer_get_logic, METH_NOARGS, "Returns the check tree, which is list of all logic rules, including locations"},
+    {"get_logic", _evermizer_get_logic, METH_NOARGS, "Returns a list of real and pseudo locations that provide progression"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 

@@ -34,7 +34,7 @@ get_locations() -> List[Location]  # returns a list of all locations
 get_items() -> List[Item]  # returns a lost of all vanilla items
 get_extra_items() -> List[Item]  # returns all extra items that can be placed, but are not vanilla
 get_traps() -> List[Item]  # returns all traps that can be placed
-get_logic() -> List[Location]  # returns the logic as real and pseudo locations
+get_logic() -> List[Location]  # returns the logic as real and pseudo locations for all locations that provide progress
 P_...  # some progression IDs
 
 class Location:
