@@ -7,6 +7,13 @@ namespace _evermizer {
 #define WITH_ASSERT
 #endif
 
+#if defined(__has_builtin) && __has_builtin(__builtin_expect)
+#define unlikely(expr) __builtin_expect(!!(expr), 0)
+#else
+#define unlikely(expr) (!!(expr))
+#endif
+
+
 /* NOTE: overwriting printf makes it impossible to run multiple mains
          concurrently without loading the module multiple times,
          but luckily it's fast. */
@@ -385,6 +392,7 @@ _evermizer_get_locations(PyObject *self, PyObject *args)
 
     for (size_t i = 0; i < ARRAY_SIZE(blank_check_tree); i++) {
         const struct check_tree_item *check = blank_check_tree + i;
+        if (check->type == CHECK_SNIFF) continue; /* skip sniff */
         for (size_t j = 0; j < location_count; j++) {
             PyObject *o = PyList_GetItem(result, j);
             if (!o) goto error;
@@ -408,6 +416,62 @@ _evermizer_get_locations(PyObject *self, PyObject *args)
             ((LocationObject*) o)->difficulty = check->difficulty;
         }
     }
+    return result;
+error:
+    Py_DECREF(result);
+    return NULL;
+}
+
+static PyObject *
+_evermizer_get_sniff_locations(PyObject *self, PyObject *args)
+{
+    /* return list of sniff spots, that can optionally be assigned to */
+    /* NOTE: this excludes missable ones and broken ones */
+    size_t sniff_count = 0;
+    for (size_t i = 0; i < ARRAY_SIZE(sniff_data); i++) {
+        if (unlikely(sniff_data[i].missable) || unlikely(sniff_data[i].excluded))
+            continue;
+        sniff_count++;
+    }
+    PyObject *result = PyList_New(sniff_count);
+
+    for (size_t i = 0, j = 0; i < ARRAY_SIZE(sniff_data); i++) {
+        if (unlikely(sniff_data[i].missable) || unlikely(sniff_data[i].excluded))
+            continue;
+        PyObject *args = Py_BuildValue("(s)", sniff_data[i].location_name);
+        PyObject *loc = PyObject_CallObject((PyObject *) &LocationType, args);
+        if (!loc) goto error;
+        ((LocationObject*) loc)->type = CHECK_SNIFF;
+        ((LocationObject*) loc)->index = (unsigned short)i;
+        Py_DECREF(args);
+        PyList_SET_ITEM(result, j, loc);
+        j++;
+    }
+
+    /* iterate over both sniff locations and check tree to fill in progression
+     * both lists have ascending indices, so we can speed up the search */
+    size_t last_j = 0;
+    for (size_t i = 0; i < ARRAY_SIZE(blank_check_tree); i++) {
+        const struct check_tree_item *check = blank_check_tree + i;
+        if (check->type != CHECK_SNIFF) continue; /* skip non-sniff */
+        for (size_t j = last_j; j < sniff_count; j++) {
+            PyObject *o = PyList_GetItem(result, j);
+            if (!o) goto error;
+            if (((LocationObject*) o)->index != check->index) continue;
+            /* fill in requirements */
+            if (check->requires[0].progress != P_NONE) {
+                PyObject *requirements = PyList_from_requirements(check->requires, ARRAY_SIZE(check->requires));
+                PyObject_SetAttrString(o, "requires", requirements);
+                assert(requirements->ob_refcnt == 2);
+                Py_DECREF(requirements);
+            }
+            /* sniff spots don't have progression, so skipping that here */
+            /* fill in difficulty (e.g. hidden chest) */
+            ((LocationObject*) o)->difficulty = check->difficulty;
+            last_j = j;
+        }
+    }
+
     return result;
 error:
     Py_DECREF(result);
@@ -518,7 +582,41 @@ error:
 }
 
 static PyObject *
-_evermizer_get_extra_items(PyObject *sef, PyObject *args)
+_evermizer_get_sniff_items(PyObject *self, PyObject *args)
+{
+    /* return list of vanilla sniff spot items, that can optionally be shuffled */
+    /* NOTE: this excludes missable ones and broken ones */
+    size_t sniff_count = 0;
+    for (size_t i = 0; i < ARRAY_SIZE(sniff_data); i++) {
+        if (unlikely(sniff_data[i].missable) || unlikely(sniff_data[i].excluded))
+            continue;
+        sniff_count++;
+    }
+    PyObject *result = PyList_New(sniff_count);
+
+    for (size_t i = 0, j = 0; i < ARRAY_SIZE(sniff_data); i++) {
+        if (unlikely(sniff_data[i].missable) || unlikely(sniff_data[i].excluded))
+            continue;
+        const struct sniff_data_item *data = sniff_data + i;
+        PyObject *args = Py_BuildValue("(s)", get_item_name(data->item));
+        PyObject *item = PyObject_CallObject((PyObject *) &ItemType, args);
+        if (!item) goto error;
+        ((ItemObject*) item)->type = CHECK_SNIFF;
+        ((ItemObject*) item)->index = data->item & 0x3ff;
+        /* vanilla sniff items don't have progression, so we can skip the lookup here */
+        Py_DECREF(args);
+        PyList_SET_ITEM(result, j, item);
+        j++;
+    }
+
+    return result;
+error:
+    Py_DECREF(result);
+    return NULL;
+}
+
+static PyObject *
+_evermizer_get_extra_items(PyObject *self, PyObject *args)
 {
     /* return list of supported items that are not placed by default */
     const size_t extra_count = ARRAY_SIZE(extra_data);
@@ -616,9 +714,11 @@ error:
 /* module */
 static PyMethodDef _evermizer_methods[] = {
     {"main", _evermizer_main, METH_VARARGS, "Run ROM generation"},
-    {"get_locations", _evermizer_get_locations, METH_NOARGS, "Returns list of locations"},
+    {"get_locations", _evermizer_get_locations, METH_NOARGS, "Returns list of \"regular\" locations"},
+    {"get_sniff_locations", _evermizer_get_sniff_locations, METH_NOARGS, "Returns list of sniff locations"},
     {"get_items", _evermizer_get_items, METH_NOARGS, "Returns list of default items"},
-    {"get_extra_items", _evermizer_get_extra_items, METH_NOARGS, "Returns list of items not placed by default"},
+    {"get_sniff_items", _evermizer_get_sniff_items, METH_NOARGS, "Returns list of vanilla sniff items"},
+    {"get_extra_items", _evermizer_get_extra_items, METH_NOARGS, "Returns list of other items not placed by default"},
     {"get_traps", _evermizer_get_traps, METH_NOARGS, "Returns trap items"},
     {"get_logic", _evermizer_get_logic, METH_NOARGS, "Returns a list of real and pseudo locations that provide progression"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
@@ -673,10 +773,11 @@ PyInit__evermizer(void)
         PyModule_AddIntConstant(m, "CHECK_ALCHEMY", CHECK_ALCHEMY) ||
         PyModule_AddIntConstant(m, "CHECK_BOSS", CHECK_BOSS) ||
         PyModule_AddIntConstant(m, "CHECK_GOURD", CHECK_GOURD) ||
-        PyModule_AddIntConstant(m, "CHECK_NPC", CHECK_NPC) ||
-        PyModule_AddIntConstant(m, "CHECK_RULE", CHECK_RULE) ||
         PyModule_AddIntConstant(m, "CHECK_EXTRA", CHECK_EXTRA) ||
-        PyModule_AddIntConstant(m, "CHECK_TRAP", CHECK_TRAP)
+        PyModule_AddIntConstant(m, "CHECK_TRAP", CHECK_TRAP) ||
+        PyModule_AddIntConstant(m, "CHECK_SNIFF", CHECK_SNIFF) ||
+        PyModule_AddIntConstant(m, "CHECK_NPC", CHECK_NPC) ||
+        PyModule_AddIntConstant(m, "CHECK_RULE", CHECK_RULE)
     ) {
         goto const_error;
     }

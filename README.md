@@ -30,8 +30,10 @@ This is used in [Archipelago cross-game multiworld randomizer](https://github.co
 ```python
 main(src: Path, dst: Path, placement: Path, apseed: str, apslot: str, seed: int, flags: str,
      money: int, exp: int, switches: list[str])  # create a randomized rom
-get_locations() -> List[Location]  # returns a list of all locations
-get_items() -> List[Item]  # returns a lost of all vanilla items
+get_locations() -> List[Location]  # returns a list of all non-sniff locations
+get_sniff_locations() -> List[Location]  # returns a lof of all sniff spots
+get_items() -> List[Item]  # returns a lost of all vanilla non-sniff items
+get_sniff_items() -> List[Item]  # returns a list of vanilla sniff spot items
 get_extra_items() -> List[Item]  # returns all extra items that can be placed, but are not vanilla
 get_traps() -> List[Item]  # returns all traps that can be placed
 get_logic() -> List[Location]  # returns the logic as real and pseudo locations for all locations that provide progress

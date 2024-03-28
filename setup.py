@@ -13,9 +13,10 @@ sources = [src_dir / '_evermizer.c']
 scripts = list(evermizer_dir.glob('patches/*.txt'))
 ips = list(evermizer_dir.glob('ips/*.txt'))
 data = [evermizer_dir / 'gourds.csv']
-tools = [evermizer_dir / 'gourds2h.py', evermizer_dir / 'everscript2h.py', evermizer_dir / 'ips2h.py']
+tools = [evermizer_dir / 'gourds2h.py', evermizer_dir / 'sniff2h.py',
+         evermizer_dir / 'everscript2h.py', evermizer_dir / 'ips2h.py']
 includes = list(root_dir.glob('*.h')) + list(evermizer_dir.glob('*.h')) + [evermizer_dir / 'main.c']
-generated = [evermizer_dir / 'gourds.h', evermizer_dir / 'gen.h']
+generated = [evermizer_dir / 'gourds.h', evermizer_dir / 'sniff.h', evermizer_dir / 'gen.h']
 depends = [f for f in scripts + ips + data + includes + tools if f not in generated]
 
 long_description = (root_dir / 'README.md').read_text(encoding='utf-8')
@@ -58,6 +59,7 @@ class EvermizerPreBuild:
         py = 'py' if shutil.which('py') else 'python'
         for script, args in (
             ['gourds2h.py', [evermizer_dir / 'gourds.h', evermizer_dir / 'gourds.csv']],
+            ['sniff2h.py', [evermizer_dir / 'sniff.h', evermizer_dir / 'sniff.csv']],
             ['everscript2h.py', [evermizer_dir / 'gen.h', *scripts]],
             ['ips2h.py', ['-a', evermizer_dir / 'gen.h', *ips]]
         ):
@@ -90,7 +92,7 @@ class EvermizerExtBuilder(EvermizerPreBuild, build_ext):
 
 setup(name='pyevermizer',
       author='black-sliver',
-      version='0.46.1',
+      version='0.48.0',
       description='Python wrapper for Evermizer',
       long_description=long_description,
       long_description_content_type='text/markdown',
