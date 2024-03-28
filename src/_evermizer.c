@@ -7,7 +7,7 @@ namespace _evermizer {
 #define WITH_ASSERT
 #endif
 
-#if defined(__has_builtin) && __has_builtin(__builtin_expect)
+if defined(__GNUC__)
 #define unlikely(expr) __builtin_expect(!!(expr), 0)
 #else
 #define unlikely(expr) (!!(expr))
