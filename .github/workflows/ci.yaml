@@ -27,7 +27,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: [3.7, "3.11", "3.12"]
+        python-version: [3.7, "3.11", "3.12", "3.13", "pypy3.10"]
         os: [ubuntu-latest, windows-latest]
 
     env:
@@ -43,7 +43,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-        # allow-prereleases: true  # required for rc/beta
+        allow-prereleases: true  # required for rc/beta
 
     - name: Install requirements
       run: python -m pip install -U pip build
