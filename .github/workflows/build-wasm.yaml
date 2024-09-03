@@ -39,8 +39,7 @@ jobs:
         run: |
           sudo find pyodide -type d -exec chmod 755 {} \;
           sudo find pyodide -type f -exec chmod 755 {} \;
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: package-wheel-pyodide
           path: wheelhouse/*.whl
-
