@@ -100,6 +100,7 @@ jobs:
         submodules: recursive
 
     - name: Set env
+      shell: bash
       run: |
         echo "RELEASE_VERSION=${GITHUB_REF#refs/*/v}" >> $GITHUB_ENV
         echo "PLATFORM_NAME=${{ matrix.os }}-${{ matrix.cibw_python }}-${{ matrix.cibw_arch }}" | tr '*' _ >> $GITHUB_ENV
