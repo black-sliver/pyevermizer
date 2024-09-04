@@ -100,7 +100,9 @@ jobs:
         submodules: recursive
 
     - name: Set env
-      run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/v}" >> $GITHUB_ENV
+      run: |
+        echo "RELEASE_VERSION=${GITHUB_REF#refs/*/v}" >> $GITHUB_ENV
+        echo "PLATFORM_NAME=${{ matrix.os }}-${{ matrix.cibw_python }}-${{ matrix.cibw_arch }}" | tr '*'  >> $GITHUB_ENV
 
     - name: Set up QEMU
       if: matrix.os == 'ubuntu-latest' && matrix.cibw_arch == 'aarch64'
@@ -121,7 +123,7 @@ jobs:
     - name: Store distribution package
       uses: actions/upload-artifact@v4
       with:
-        name: python-package-${{ matrix.os }}-${{ matrix.cibw_python }}-${{ matrix.cibw_arch }}
+        name: python-package-${{ env.PLATFORM_NAME }}
         path: dist/
 
     - name: Create Release
