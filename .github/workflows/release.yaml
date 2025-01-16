@@ -163,6 +163,10 @@ jobs:
         merge-multiple: true
         path: dist/
 
+    - name: Print SHA256
+      run: |
+        sha256sum dist/*
+
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
 
@@ -188,6 +192,10 @@ jobs:
         pattern: python-package-*
         merge-multiple: true
         path: dist/
+
+    - name: Print SHA256
+      run: |
+        sha256sum dist/*
 
     - name: Publish to TestPyPI
       uses: pypa/gh-action-pypi-publish@release/v1
