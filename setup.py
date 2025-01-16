@@ -92,7 +92,7 @@ class EvermizerExtBuilder(EvermizerPreBuild, build_ext):
 
 setup(name='pyevermizer',
       author='black-sliver',
-      version='0.48.0',
+      version='0.48.1',
       description='Python wrapper for Evermizer',
       long_description=long_description,
       long_description_content_type='text/markdown',
